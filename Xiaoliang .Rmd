@@ -1,0 +1,118 @@
+---
+title: "Untitled"
+output:
+  pdf_document: default
+  html_document: default
+date: "2023-05-16"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# 导入必要的包
+library(tidyverse)
+library(glmnet)
+library(pROC)
+
+# 读取"weatherAUS"数据集
+weather_data <- read.csv("weatherAUS.csv")
+
+# 数据预处理
+# 选择感兴趣的变量，如天气特征和目标变量
+selected_variables <- c("MaxTemp", "MinTemp", "Rainfall", "RainToday", "RainTomorrow")
+weather_subset <- weather_data %>% select(all_of(selected_variables))
+
+#1. MaxTemp：当天的最高温度（以摄氏度为单位）。
+#2. MinTemp：当天的最低温度（以摄氏度为单位）。
+#3. Rainfall：当天的降雨量（以毫米为单位）。
+#4. RainToday：当天是否有降雨，表示为二元变量，"Yes" 表示有降雨，"No" 表示无降雨。
+#5. RainTomorrow：预测的目标变量，表示明天是否会下雨，也是一个二元变量，"Yes" 表示会下雨，"No" 表示不会下雨。
+#这些特征可以用来预测明天是否会下雨。"MaxTemp" 和 "MinTemp" 提供了关于温度的信息，"Rainfall" 提供了关于降雨量的信息，"RainToday" 提供了今天是否有降雨的信息。根据这些特征，可以构建一个模型来预测明天是否会下雨。
+
+
+# 处理缺失值
+weather_subset <- na.omit(weather_subset)
+
+# 创建响应变量的因子
+weather_subset$RainTomorrow <- as.factor(weather_subset$RainTomorrow)
+
+# 拆分训练集和测试集
+set.seed(123)
+train_indices <- sample(1:nrow(weather_subset), 0.7 * nrow(weather_subset))
+train_data <- weather_subset[train_indices, ]
+test_data <- weather_subset[-train_indices, ]
+
+# 构建广义线性模型
+model <- glm(RainTomorrow ~ ., data = train_data, family = binomial)
+
+# 在测试集上进行预测
+predictions <- predict(model, newdata = test_data, type = "response")
+
+# 将预测结果转换为二元分类标签
+predicted_labels <- ifelse(predictions > 0.5, "Yes", "No")
+
+# 创建混淆矩阵
+confusion_matrix <- table(Actual = test_data$RainTomorrow, Predicted = predicted_labels)
+print(confusion_matrix)
+
+# 计算模型的准确率
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+print(paste("Accuracy:", accuracy))
+
+# 计算模型的灵敏度和特异度
+sensitivity <- confusion_matrix[2, 2] / sum(confusion_matrix[2, ])
+specificity <- confusion_matrix[1, 1] / sum(confusion_matrix[1, ])
+print(paste("Sensitivity:", sensitivity))
+print(paste("Specificity:", specificity))
+
+# 创建ROC曲线数据
+roc_data <- roc(test_data$RainTomorrow, predictions)
+
+# 将ROC对象转换为数据框
+roc_df <- data.frame(FPR = 1 - roc_data$specificities, TPR = roc_data$sensitivities)
+
+# 绘制ROC曲线
+ggplot(data = roc_df, aes(x = FPR, y = TPR)) +
+  geom_line(color = "dodgerblue", size = 1.5) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") +
+  labs(x = "False Positive Rate", y = "True Positive Rate") +
+  ggtitle("ROC Curve") +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.line = element_line(color = "black"),
+        plot.title = element_text(hjust = 0.5, size = 16, face = "bold"))
+# 导入必要的包
+library(pROC)
+
+# 计算AUC
+roc_auc <- roc(test_data$RainTomorrow, predictions)$auc
+
+# 输出AUC结论
+if (roc_auc > 0.5) {
+  conclusion <- "AUC: {:.3f}，模型具有良好的分类性能。"
+} else if (roc_auc == 0.5) {
+  conclusion <- "AUC: {:.3f}，模型的分类性能等于随机猜测。"
+} else {
+  conclusion <- "AUC: {:.3f}，模型的分类性能较低。"
+}
+
+print(paste(conclusion, roc_auc))
+
+
+```
+根据混淆矩阵的结果和计算的指标，我们可以得出以下结论：
+
+准确率（Accuracy）：0.8044，表示模型预测的正确率约为80.44%。
+灵敏度（Sensitivity）：0.2685，也称为召回率或真阳性率，表示模型正确识别出阳性样本的能力约为26.85%。
+特异度（Specificity）：0.9568，表示模型正确识别出阴性样本的能力约为95.68%。
+根据准确率来衡量模型的整体性能，该模型的准确率约为80.44%，表示模型对于样本的分类预测在整体上是比较准确的。然而，从灵敏度和特异度来看，模型在识别阳性样本方面的能力较弱，而在识别阴性样本方面的能力较强。
+
+综上所述，该模型在预测天气是否会下雨的任务中表现良好，但在准确识别阳性样本方面有待改进。
+
+```{r}
+
+```
+
